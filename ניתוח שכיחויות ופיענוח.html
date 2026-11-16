@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ניתוח שכיחויות ופיענוח</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root { color-scheme: light dark; --fg:#1a1a1a; --muted:#6b6b6b; --line:#d9d9d9; --accent:#2d5a80; --ok:#1d6b4a; --bad:#a32d2d; --bg:#ffffff; --card:#f6f6f4; }
+  @media (prefers-color-scheme: dark) { :root { --fg:#ececec; --muted:#a0a0a0; --line:#3a3a3a; --accent:#8fb6d9; --ok:#7fd3a9; --bad:#f09595; --bg:#1e1e1e; --card:#262626; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, "Segoe UI", Arial, sans-serif; background:var(--bg); color:var(--fg); line-height:1.7; }
+  main { max-width: 960px; margin: 0 auto; padding: 1.25rem; }
+  h1 { font-size: 22px; font-weight: 500; margin: 0 0 1rem; }
+  h2 { font-size: 18px; font-weight: 500; margin: 1.5rem 0 0.5rem; }
+  h3 { font-size: 16px; font-weight: 500; margin: 1rem 0 0.4rem; }
+  section { margin-bottom: 1.5rem; }
+  textarea { width: 100%; font: inherit; font-size: 16px; padding: 0.6rem; border:0.5px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); }
+  button { font: inherit; padding: 0.35rem 0.9rem; border:0.5px solid var(--line); border-radius: 8px; background: transparent; color: var(--fg); cursor: pointer; margin-left: 0.4rem; }
+  button:hover { background: var(--card); }
+  button.active { background: var(--card); border-color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+  .card { background: var(--card); border-radius: 12px; padding: 0.9rem 1rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 0.25rem 0.4rem; border-bottom: 0.5px solid var(--line); text-align: right; }
+  th { color: var(--muted); font-weight: 400; }
+  td.num { font-variant-numeric: tabular-nums; }
+  .summary { color: var(--muted); font-size: 14px; }
+  .twowords { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .pill { background: var(--card); border: 0.5px solid var(--line); border-radius: 8px; padding: 0.15rem 0.6rem; font-size: 15px; }
+  .pill small { color: var(--muted); }
+  .guesses { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.6rem; }
+  .gbox { display: flex; align-items: center; gap: 0.5rem; background: var(--card); border-radius: 10px; padding: 0.5rem 0.6rem; }
+  .gbox .cipher { font-size: 22px; min-width: 2ch; text-align: center; }
+  .gbox input { width: 3.2rem; font: inherit; font-size: 18px; text-align: center; padding: 0.2rem; border: 0.5px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+  .gbox input.invalid { border-color: var(--bad); }
+  .err { color: var(--bad); font-size: 13px; min-height: 1.1em; }
+  .decoded { font-size: 19px; line-height: 2.6; background: var(--card); border-radius: 12px; padding: 1rem; }
+  .wbox { display: inline-flex; flex-direction: column; align-items: center; vertical-align: top; margin: 0 0.12em; }
+  .wnum { font-size: 11px; color: var(--muted); line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .known, .unknown { display: inline-block; min-width: 1.1em; text-align: center; }
+  .known { color: var(--ok); font-weight: 500; }
+  .unknown { color: var(--muted); }
+  .note { color: var(--muted); font-size: 14px; }
+  .chartbox { position: relative; height: 320px; margin-top: 0.75rem; }
+  .story p { margin: 0 0 0.8rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>ניתוח שכיחויות ופיענוח</h1>
+
+  <section>
+    <label for="input">הטקסט המוצפן (אפשר להדביק טקסט אחר)</label>
+    <textarea id="input" rows="6">שטאץ נאעץ, הנא שצרגץ טוזצגן האיך טראס וצתע שט ודגם, שגגפיר בגאץ קהשאן ודקאב בשעו הקבע ברתק וצעבתו. בראס נבנו צכשגקגץ פשאלגץ, נעקאך נגחאגגץ עץ צגץ אהאאגק, אנטצת הגך צתענגץ באתדגץ ושעקאי. כתהג טובגה צרבקי, על אראטמו גשנו, כג נעבאת עץ מבעגץ. נשצר טשצאע צצך עת גאץ רצגשג, אסץ הץ גש טך שהטאי, הפשק טכיאב טנא. ניקהו בדקאב אבומטרו בשבאע ובה.</textarea>
+    <p class="note">שימו לב: האותיות הסופיות (ך, ם, ן, ף, ץ) נספרות כאותיות נפרדות.</p>
+    <div style="margin-top:0.5rem"><button id="analyze">נתח טקסט</button></div>
+  </section>
+
+  <section>
+    <h2>סטטיסטיקה</h2>
+    <div id="summary" class="summary"></div>
+    <div class="grid" style="margin-top:0.75rem">
+      <div class="card">
+        <h3>שכיחות אותיות</h3>
+        <table><thead><tr><th>אות</th><th>מופעים</th><th>אחוז</th></tr></thead><tbody id="t-letters"></tbody></table>
+      </div>
+      <div class="card">
+        <h3>אותיות בתחילת מילה</h3>
+        <table><thead><tr><th>אות</th><th>מילים</th></tr></thead><tbody id="t-init"></tbody></table>
+        <h3>אותיות שמופיעות רק בסוף מילה</h3>
+        <table><thead><tr><th>אות</th><th>מילים</th></tr></thead><tbody id="t-final"></tbody></table>
+      </div>
+    </div>
+    <h3>מילים דו-אותיות</h3>
+    <div id="two" class="twowords"></div>
+  </section>
+
+  <section>
+    <h2>עזרים: שכיחות בעברית</h2>
+    <p class="note">הנתונים לקוחים מהטבלה של הממוצע המשוקלל של שלושה קורפוסים (עיתון הארץ, כנסת, ויקיפדיה). הטבלה כוללת את האותיות הסופיות כשורות נפרדות.</p>
+    <div>
+      <button id="btn-chart" aria-expanded="false" aria-controls="chart-wrap">הצג גרף שכיחויות</button>
+    </div>
+    <div id="chart-wrap" hidden>
+      <div style="margin-top:0.75rem">
+        <button id="btn-all" class="active">כל האותיות</button>
+        <button id="btn-finals">סופיות בלבד</button>
+      </div>
+      <div class="chartbox card" style="margin-top:0.5rem"><canvas id="freq-chart" role="img" aria-label="גרף שכיחויות האותיות בעברית"></canvas></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>ניחושים</h2>
+    <p class="note">הקלידו לכל אות מוצפנת את האות שאתם מנחשים במקורה. אפשר להשתמש רק באותיות עבריות.</p>
+    <div id="guess-grid" class="guesses"></div>
+    <div style="margin:0.75rem 0"><button id="clear">נקה ניחושים</button></div>
+    <h3>הטקסט המוצפן עם מספרי מילים</h3>
+    <div id="cipher-view" class="decoded"></div>
+    <h3>הטקסט אחרי הניחושים</h3>
+    <div style="margin-bottom:0.5rem"><button id="reveal">הצג אותיות מוצפנות במקום קווים</button></div>
+    <div id="decoded" class="decoded"></div>
+  </section>
+
+  <section class="story">
+    <h2>רקע היסטורי: מרי מלכת הסקוטים, אליזבת והצופן</h2>
+    <p>מרי סטיוארט הייתה מלכת הסקוטים, וגם קרובת משפחה של אליזבת הראשונה, מלכת אנגליה. בשנת 1568, אחרי שנאלצה לברוח ממולדתה, מרי נמלטה לאנגליה, ואליזבת כלאה אותה שם במשך כ-19 שנה. אליזבת חששה ממנה, כי מרי הייתה מועמדת לכתר האנגלי, ורבים מאנשי הקתוליות ראו בה את היורשת החוקית.</p>
+    <p>בשנת 1586 נרקמה מזימה שנקראת מזימת בבינגטון. אנתוני בבינגטון, צעיר אנגלי, וחבריו תכננו להרוג את אליזבת ולשחרר את מרי מהכלא. הקושרים שלחו ביניהם מכתבים מוצפנים, והם הוברחו אל מרי בחביות בירה. אבל פרנסיס וולסינגהם, ראש המודיעין של אליזבת, קיבל לידיו את המכתבים ואת המתווכים שהביאו אותם, כך שכל התכנית נחשפה לעיניו.</p>
+    <p>המכתבים נכתבו בצופן מסוג נומנקלטור, מערכת שבה כל אות וכל מילה מיוצגות על ידי סמלים, לעיתים מספרים ולעיתים מילים מיוחדות. תומאס פליפס, מומחה לפענוח צפנים שעבד עבור וולסינגהם, פיצח את הצופן. הוא השתמש בניתוח שכיחויות של הסמלים, כלומר בספירה של כמה פעמים כל סמל מופיע, והשווה את התוצאה לדפוסים הרגילים בשפה האנגלית. בדרך זו הוא שחזר את המפתח לצופן.</p>
+    <p>אחרי שהצופן נפרץ, פליפס גם הוסיף למכתב של מרי פוסטסקריפט מזויף, שבו ביקשה לדעת מי הם ששת האצילים שמתכננים את המזימה. בעקבות הפוסטסקריפט הזה נאסף נגד מרי חומר מספיק לדין, ובפברואר 1587 היא הוצאה להורג. הסיפור מראה שניתוח שכיחויות, שנראה טכני ופשוט, יכול לשנות את גורלם של אנשים.</p>
+    <p>לשיעור: למה ניתוח השכיחויות עבד על הצופן של מזימת בבינגטון? מה היה קורה אם הצופן היה ארוך יותר, או אם הקושרים היו נמנעים משימוש בסמלים החוזרים על עצמם?</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  var HE = "אבגדהוזחטיכךלמםנןסעפףצץקרשת";
+  var FINAL_SET = ["ך", "ם", "ן", "ף", "ץ"];
+  var FREQ = [
+    ["י", 11.67], ["ו", 11.11], ["ה", 8.48], ["ר", 6.52], ["ל", 6.27], ["ת", 5.49], ["ב", 5.34],
+    ["מ", 5.11], ["א", 4.78], ["ש", 4.33], ["נ", 3.65], ["ע", 2.72], ["ד", 2.69], ["ם", 2.68],
+    ["ק", 2.55], ["ח", 2.24], ["פ", 2.22], ["ס", 2.16], ["כ", 1.96], ["ג", 1.71], ["ט", 1.69],
+    ["ן", 1.36], ["צ", 1.31], ["ז", 0.94], ["ך", 0.39], ["ף", 0.22], ["ץ", 0.19]
+  ];
+  var SEP = /^[\s.,:;!?()"'\-]+$/;
+  var guesses = {};
+  var reveal = false;
+  var chart = null;
+
+  var input = document.getElementById("input");
+  var summary = document.getElementById("summary");
+  var tLetters = document.getElementById("t-letters");
+  var tInit = document.getElementById("t-init");
+  var tFinal = document.getElementById("t-final");
+  var twoBox = document.getElementById("two");
+  var guessGrid = document.getElementById("guess-grid");
+  var cipherView = document.getElementById("cipher-view");
+  var decoded = document.getElementById("decoded");
+  var revealBtn = document.getElementById("reveal");
+
+  function isHe(ch) { return HE.indexOf(ch) !== -1; }
+  function words(text) { return text.split(/[\s.,:;!?()"'\-]+/).filter(Boolean); }
+  function countBy(arr) {
+    var m = {};
+    arr.forEach(function (x) { m[x] = (m[x] || 0) + 1; });
+    return Object.keys(m).map(function (k) { return [k, m[k]]; })
+      .sort(function (a, b) { return b[1] - a[1] || (a[0] < b[0] ? -1 : 1); });
+  }
+  function cell(text, cls) {
+    var td = document.createElement("td");
+    if (cls) td.className = cls;
+    td.textContent = text;
+    return td;
+  }
+  function row(cells) {
+    var tr = document.createElement("tr");
+    cells.forEach(function (c) { tr.appendChild(c); });
+    return tr;
+  }
+  function fillTable(tbody, pairs, total) {
+    tbody.innerHTML = "";
+    if (!pairs.length) { tbody.appendChild(row([cell("אין נתונים")])); return; }
+    pairs.forEach(function (p) {
+      var cells = [cell(p[0]), cell(String(p[1]), "num")];
+      if (total !== undefined) cells.push(cell((100 * p[1] / total).toFixed(1) + "%", "num"));
+      tbody.appendChild(row(cells));
+    });
+  }
+
+  // Splits text into word and separator pieces, keeping separators so the layout is preserved.
+  function tokenize(text) {
+    return text.split(/([\s.,:;!?()"'\-]+)/).filter(function (s) { return s !== ""; });
+  }
+
+  // Renders the text word by word; each word gets a number below it.
+  // fillWord(wordText, element) fills the word's letters into element.
+  function renderWords(container, text, fillWord) {
+    container.innerHTML = "";
+    var n = 0;
+    tokenize(text).forEach(function (p) {
+      if (SEP.test(p)) {
+        p.split("\n").forEach(function (s, idx) {
+          if (idx > 0) container.appendChild(document.createElement("br"));
+          if (s) container.appendChild(document.createTextNode(s));
+        });
+        return;
+      }
+      n += 1;
+      var box = document.createElement("span");
+      box.className = "wbox";
+      var wv = document.createElement("span");
+      fillWord(p, wv);
+      var num = document.createElement("span");
+      num.className = "wnum";
+      num.textContent = String(n);
+      box.appendChild(wv);
+      box.appendChild(num);
+      container.appendChild(box);
+    });
+  }
+
+  function fillCipherWord(w, el) { el.textContent = w; }
+
+  function fillDecodedWord(w, el) {
+    for (var i = 0; i < w.length; i++) {
+      var ch = w[i];
+      if (isHe(ch)) {
+        var s = document.createElement("span");
+        if (guesses[ch]) {
+          s.className = "known";
+          s.textContent = guesses[ch];
+        } else if (reveal) {
+          s.className = "unknown";
+          s.textContent = ch;
+        } else {
+          s.className = "unknown";
+          s.textContent = "_";
+        }
+        el.appendChild(s);
+      } else {
+        el.appendChild(document.createTextNode(ch));
+      }
+    }
+  }
+
+  function renderCipher() { renderWords(cipherView, input.value, fillCipherWord); }
+  function renderDecoded() { renderWords(decoded, input.value, fillDecodedWord); }
+
+  function analyze() {
+    var text = input.value;
+    var ws = words(text);
+    var letters = [];
+    for (var i = 0; i < text.length; i++) if (isHe(text[i])) letters.push(text[i]);
+
+    summary.textContent = "אותיות: " + letters.length + " · מילים: " + ws.length + " · אותיות שונות: " + countBy(letters).length;
+
+    var lp = countBy(letters);
+    fillTable(tLetters, lp, letters.length);
+
+    var initials = ws.map(function (w) { return w[0]; }).filter(isHe);
+    fillTable(tInit, countBy(initials));
+
+    var midSet = {};
+    ws.forEach(function (w) {
+      for (var j = 0; j < w.length - 1; j++) if (isHe(w[j])) midSet[w[j]] = true;
+    });
+    var endOnly = ws.map(function (w) { return w[w.length - 1]; })
+      .filter(function (c) { return isHe(c) && !midSet[c]; });
+    fillTable(tFinal, countBy(endOnly));
+
+    var twos = ws.filter(function (w) { return w.length === 2 && [...w].every(isHe); });
+    twoBox.innerHTML = "";
+    if (!twos.length) {
+      var none = document.createElement("span");
+      none.className = "note";
+      none.textContent = "אין מילים דו-אותיות בטקסט.";
+      twoBox.appendChild(none);
+    } else {
+      countBy(twos).forEach(function (p) {
+        var s = document.createElement("span");
+        s.className = "pill";
+        s.textContent = p[0] + " ";
+        var sm = document.createElement("small");
+        sm.textContent = "× " + p[1];
+        s.appendChild(sm);
+        twoBox.appendChild(s);
+      });
+    }
+
+    buildGuesses(lp.map(function (p) { return p[0]; }));
+    renderCipher();
+    renderDecoded();
+  }
+
+  function buildGuesses(cipherLetters) {
+    guessGrid.innerHTML = "";
+    cipherLetters.forEach(function (c) {
+      var box = document.createElement("div");
+      box.className = "gbox";
+      var cs = document.createElement("span");
+      cs.className = "cipher";
+      cs.textContent = c;
+      var inp = document.createElement("input");
+      inp.type = "text";
+      inp.maxLength = 1;
+      inp.setAttribute("aria-label", "ניחוש לאות " + c);
+      inp.value = guesses[c] || "";
+      var err = document.createElement("div");
+      err.className = "err";
+      inp.addEventListener("input", function () {
+        var v = inp.value.trim();
+        if (v === "") {
+          delete guesses[c];
+          inp.classList.remove("invalid");
+          err.textContent = "";
+        } else if (isHe(v)) {
+          guesses[c] = v;
+          inp.classList.remove("invalid");
+          err.textContent = "";
+        } else {
+          inp.classList.add("invalid");
+          err.textContent = "הזינו אות עברית אחת";
+        }
+        renderDecoded();
+      });
+      var left = document.createElement("div");
+      left.appendChild(inp);
+      left.appendChild(err);
+      box.appendChild(cs);
+      box.appendChild(left);
+      guessGrid.appendChild(box);
+    });
+  }
+
+  document.getElementById("clear").addEventListener("click", function () {
+    guesses = {};
+    buildGuesses(countBy([...input.value].filter(isHe)).map(function (p) { return p[0]; }));
+    renderDecoded();
+  });
+
+  revealBtn.addEventListener("click", function () {
+    reveal = !reveal;
+    revealBtn.classList.toggle("active", reveal);
+    revealBtn.textContent = reveal ? "הצג קווים במקום אותיות מוצפנות" : "הצג אותיות מוצפנות במקום קווים";
+    renderDecoded();
+  });
+
+  function drawChart(mode) {
+    var data = mode === "finals" ? FREQ.filter(function (x) { return FINAL_SET.indexOf(x[0]) !== -1; }) : FREQ;
+    var cfg = {
+      type: "bar",
+      data: {
+        labels: data.map(function (x) { return x[0]; }),
+        datasets: [{ label: "אחוז מכלל האותיות", data: data.map(function (x) { return x[1]; }), backgroundColor: "#2d5a80" }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { title: { display: true, text: "אחוז" }, beginAtZero: true } }
+      }
+    };
+    if (chart) chart.destroy();
+    chart = new Chart(document.getElementById("freq-chart"), cfg);
+  }
+
+  var btnChart = document.getElementById("btn-chart");
+  var wrap = document.getElementById("chart-wrap");
+  var btnAll = document.getElementById("btn-all");
+  var btnFinals = document.getElementById("btn-finals");
+  var mode = "all";
+
+  btnChart.addEventListener("click", function () {
+    var open = wrap.hidden;
+    wrap.hidden = !open;
+    btnChart.setAttribute("aria-expanded", String(open));
+    btnChart.textContent = open ? "הסתר גרף שכיחויות" : "הצג גרף שכיחויות";
+    if (open) drawChart(mode);
+  });
+  btnAll.addEventListener("click", function () {
+    mode = "all";
+    btnAll.classList.add("active");
+    btnFinals.classList.remove("active");
+    drawChart(mode);
+  });
+  btnFinals.addEventListener("click", function () {
+    mode = "finals";
+    btnFinals.classList.add("active");
+    btnAll.classList.remove("active");
+    drawChart(mode);
+  });
+
+  document.getElementById("analyze").addEventListener("click", analyze);
+  analyze();
+})();
+</script>
+</body>
+</html>
